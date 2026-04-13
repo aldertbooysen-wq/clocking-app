@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+
+<body style="font-family: Arial; text-align:center; padding:20px;">
+
+<h2>📍 Site: SITE A</h2>
+
+<div id="reader" style="width:300px; margin:auto;"></div>
+<p id="status">Loading...</p>
+
+<div id="result" style="display:none;">
+  <h3 id="empDisplay"></h3>
+
+  <button onclick="clock('IN')">CLOCK IN</button>
+  <button onclick="clock('OUT')">CLOCK OUT</button>
+</div>
+
+<hr>
+
+<h3>Manual Entry</h3>
+
+<input type="text" id="manualEmp" placeholder="Enter EmpNo">
+<p id="manualName"></p>
+
+<button onclick="manualClock('IN')">Manual IN</button>
+<button onclick="manualClock('OUT')">Manual OUT</button>
+
+<script>
+
+const API = "https://script.google.com/macros/s/AKfycbyUQa1Awg3dzMygZhrkCOKMByk3leJcmv7Y8LHssnCa-6xzZzazLYH4_tgTpEs9kwwIeA/exec";
+
+let employees = [];
+let empNo = "";
+let empName = "";
+
+// LOAD EMPLOYEES
+fetch(API + "?action=employees")
+  .then(res => res.json())
+  .then(data => {
+    employees = data;
+    document.getElementById("status").innerText = "Ready ✅";
+    startScanner();
+  });
+
+// CAMERA
+function startScanner() {
+  const qr = new Html5Qrcode("reader");
+
+  qr.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    onScanSuccess
+  ).catch(err => {
+    document.getElementById("status").innerText = "Camera error ❌";
+  });
+}
+
+// QR
+function onScanSuccess(decodedText) {
+  let emp = employees.find(e => decodedText.includes(e.empNo));
+
+  if (!emp) return status("Not found ❌");
+  if (!emp.active) return status("Inactive ❌");
+
+  empNo = emp.empNo;
+  empName = emp.empName;
+
+  document.getElementById("empDisplay").innerText = empNo + " - " + empName;
+  document.getElementById("result").style.display = "block";
+}
+
+// MANUAL LOOKUP
+document.getElementById("manualEmp").addEventListener("input", function () {
+  let val = this.value.toUpperCase();
+  let emp = employees.find(e => e.empNo === val);
+
+  document.getElementById("manualName").innerText =
+    emp ? emp.empName : "Not found";
+});
+
+// CLOCK
+function clock(type) {
+  send(empNo, empName, type, "QR");
+}
+
+function manualClock(type) {
+  let val = document.getElementById("manualEmp").value.toUpperCase();
+  let emp = employees.find(e => e.empNo === val);
+
+  if (!emp) return alert("Not found");
+  if (!emp.active) return alert("Inactive");
+
+  send(emp.empNo, emp.empName, type, "Manual");
+}
+
+// SEND
+function send(empNo, empName, type, method) {
+
+  fetch(API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      empNo,
+      empName,
+      type,
+      site: "Site A",
+      supervisor: "Piet",
+      method
+    })
+  });
+
+  alert(type + " saved ✅");
+}
+
+function status(msg){
+  document.getElementById("status").innerText = msg;
+}
+
+</script>
+
+</body>
+</html>
