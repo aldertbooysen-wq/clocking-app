@@ -31,13 +31,13 @@
 
 <script>
 
-const API = "https://script.google.com/macros/s/AKfycbyUQa1Awg3dzMygZhrkCOKMByk3leJcmv7Y8LHssnCa-6xzZzazLYH4_tgTpEs9kwwIeA/exec";
+const API = "https://script.google.com/macros/s/AKfycbxFK3iB-nIOnVzBFqt5xI_te_fHCr17ewt5z0m0dvQc6wGFBN-C9KJ3pwziHYJM47j1/exec";
 
 let employees = [];
 let empNo = "";
 let empName = "";
 
-// 🔥 LOAD EMPLOYEES
+// LOAD EMPLOYEES
 fetch(API + "?action=employees")
   .then(res => res.json())
   .then(data => {
@@ -46,7 +46,7 @@ fetch(API + "?action=employees")
     startScanner();
   });
 
-// 📷 START CAMERA
+// CAMERA
 function startScanner() {
   const qr = new Html5Qrcode("reader");
 
@@ -59,7 +59,7 @@ function startScanner() {
   });
 }
 
-// 🔍 QR RESULT
+// QR RESULT
 function onScanSuccess(decodedText) {
 
   let emp = employees.find(e => decodedText.includes(e.empNo));
@@ -74,7 +74,7 @@ function onScanSuccess(decodedText) {
   document.getElementById("result").style.display = "block";
 }
 
-// 🔍 MANUAL LOOKUP
+// MANUAL LOOKUP
 document.getElementById("manualEmp").addEventListener("input", function () {
   let val = this.value.toUpperCase();
   let emp = employees.find(e => e.empNo === val);
@@ -83,7 +83,7 @@ document.getElementById("manualEmp").addEventListener("input", function () {
     emp ? emp.empName : "Not found";
 });
 
-// 🔥 CLOCK FUNCTIONS
+// CLOCK FUNCTIONS
 function clock(type) {
   send(empNo, empName, type, "QR");
 }
@@ -99,7 +99,7 @@ function manualClock(type) {
   send(emp.empNo, emp.empName, type, "Manual");
 }
 
-// 🔥 FINAL SEND (GET – WORKS ALWAYS)
+// 🔥 FINAL SEND (GET – MATCHES YOUR TEST)
 function send(empNo, empName, type, method) {
 
   const url = API +
