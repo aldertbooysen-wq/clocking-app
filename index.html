@@ -37,7 +37,7 @@ let employees = [];
 let empNo = "";
 let empName = "";
 
-// LOAD EMPLOYEES
+// 🔥 LOAD EMPLOYEES
 fetch(API + "?action=employees")
   .then(res => res.json())
   .then(data => {
@@ -46,7 +46,7 @@ fetch(API + "?action=employees")
     startScanner();
   });
 
-// CAMERA
+// 📷 START CAMERA
 function startScanner() {
   const qr = new Html5Qrcode("reader");
 
@@ -59,8 +59,9 @@ function startScanner() {
   });
 }
 
-// QR
+// 🔍 QR RESULT
 function onScanSuccess(decodedText) {
+
   let emp = employees.find(e => decodedText.includes(e.empNo));
 
   if (!emp) return status("Not found ❌");
@@ -73,7 +74,7 @@ function onScanSuccess(decodedText) {
   document.getElementById("result").style.display = "block";
 }
 
-// MANUAL LOOKUP
+// 🔍 MANUAL LOOKUP
 document.getElementById("manualEmp").addEventListener("input", function () {
   let val = this.value.toUpperCase();
   let emp = employees.find(e => e.empNo === val);
@@ -82,12 +83,13 @@ document.getElementById("manualEmp").addEventListener("input", function () {
     emp ? emp.empName : "Not found";
 });
 
-// CLOCK
+// 🔥 CLOCK FUNCTIONS
 function clock(type) {
   send(empNo, empName, type, "QR");
 }
 
 function manualClock(type) {
+
   let val = document.getElementById("manualEmp").value.toUpperCase();
   let emp = employees.find(e => e.empNo === val);
 
@@ -97,25 +99,26 @@ function manualClock(type) {
   send(emp.empNo, emp.empName, type, "Manual");
 }
 
-// SEND
+// 🔥 FINAL SEND (GET – WORKS ALWAYS)
 function send(empNo, empName, type, method) {
 
-  fetch(API, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      empNo,
-      empName,
-      type,
-      site: "Site A",
-      supervisor: "Piet",
-      method
-    })
-  });
+  const url = API +
+    "?empNo=" + empNo +
+    "&empName=" + encodeURIComponent(empName) +
+    "&type=" + type +
+    "&site=Site A" +
+    "&supervisor=Piet" +
+    "&method=" + method;
 
-  alert(type + " saved ✅");
+  fetch(url)
+    .then(res => res.text())
+    .then(res => {
+      console.log(res);
+      alert(type + " saved ✅");
+    })
+    .catch(err => {
+      alert("ERROR ❌ " + err);
+    });
 }
 
 function status(msg){
