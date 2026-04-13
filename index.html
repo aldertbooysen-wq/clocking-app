@@ -37,7 +37,7 @@ let employees = [];
 let empNo = "";
 let empName = "";
 
-// LOAD EMPLOYEES
+// 🔥 LOAD EMPLOYEES
 fetch(API + "?action=employees")
   .then(res => res.json())
   .then(data => {
@@ -46,7 +46,7 @@ fetch(API + "?action=employees")
     startScanner();
   });
 
-// CAMERA
+// 📷 CAMERA
 function startScanner() {
   const qr = new Html5Qrcode("reader");
 
@@ -59,7 +59,7 @@ function startScanner() {
   });
 }
 
-// QR RESULT
+// 🔍 QR SCAN
 function onScanSuccess(decodedText) {
 
   let emp = employees.find(e => decodedText.includes(e.empNo));
@@ -74,7 +74,7 @@ function onScanSuccess(decodedText) {
   document.getElementById("result").style.display = "block";
 }
 
-// MANUAL LOOKUP
+// 🔍 MANUAL LOOKUP
 document.getElementById("manualEmp").addEventListener("input", function () {
   let val = this.value.toUpperCase();
   let emp = employees.find(e => e.empNo === val);
@@ -83,7 +83,7 @@ document.getElementById("manualEmp").addEventListener("input", function () {
     emp ? emp.empName : "Not found";
 });
 
-// CLOCK FUNCTIONS
+// 🔥 CLOCK FUNCTIONS
 function clock(type) {
   send(empNo, empName, type, "QR");
 }
@@ -99,7 +99,7 @@ function manualClock(type) {
   send(emp.empNo, emp.empName, type, "Manual");
 }
 
-// 🔥 FINAL SEND (GET – MATCHES YOUR TEST)
+// 🔥 FINAL SEND (WITH BLOCK HANDLING)
 function send(empNo, empName, type, method) {
 
   const url = API +
@@ -113,8 +113,20 @@ function send(empNo, empName, type, method) {
   fetch(url)
     .then(res => res.text())
     .then(res => {
-      console.log(res);
-      alert(type + " saved ✅");
+
+      console.log("SERVER:", res);
+
+      if (res === "BLOCKED") {
+        alert("❌ Already " + type);
+        return;
+      }
+
+      if (res === "SAVED") {
+        alert(type + " saved ✅");
+        return;
+      }
+
+      alert("Unexpected response: " + res);
     })
     .catch(err => {
       alert("ERROR ❌ " + err);
