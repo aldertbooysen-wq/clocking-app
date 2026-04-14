@@ -119,12 +119,6 @@ function send(empNo, empName, type, method) {
 
   const payload = { empNo, empName, type, method, site:"Site A", supervisor:"Piet" };
 
-  // 🔥 OFFLINE CHECK
-  if (!navigator.onLine) {
-    saveOffline(payload);
-    return;
-  }
-
   const url = API +
     "?empNo=" + empNo +
     "&empName=" + encodeURIComponent(empName) +
@@ -135,38 +129,51 @@ function send(empNo, empName, type, method) {
 
   fetch(url)
     .then(res => {
-      if (!res.ok) throw new Error("Network error");
+      if (!res.ok) throw new Error();
       return res.text();
     })
     .then(res => {
 
-      if (res === "BLOCKED") return alert("❌ Already " + type);
-      if (res === "SAVED") return alert(type + " saved ✅");
+      if (res === "SAVED") {
+        alert(type + " saved ✅");
+      } else if (res === "BLOCKED") {
+        alert("❌ Already " + type);
+      } else {
+        throw new Error();
+      }
 
-      saveOffline(payload);
     })
-    .catch(() => saveOffline(payload));
+    .catch(() => {
+      saveOffline(payload);
+    });
 }
 
 // =========================
 // OFFLINE SAVE
 // =========================
 function saveOffline(data) {
+
   let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
   q.push(data);
   localStorage.setItem("offlineQueue", JSON.stringify(q));
 
-  showOfflineCount();
+  document.getElementById("offlineCount").innerText =
+    "Offline clocks: " + q.length + " ⚠️";
+
   alert("Saved offline ⚠️");
 }
 
 // =========================
-// SYNC (FIXED)
+// SYNC (FINAL FIX)
 // =========================
 async function syncOffline() {
 
   let queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-  if (queue.length === 0) return;
+
+  if (queue.length === 0) {
+    document.getElementById("offlineCount").innerText = "All synced ✅";
+    return;
+  }
 
   let newQueue = [];
 
@@ -183,10 +190,7 @@ async function syncOffline() {
     try {
       const res = await fetch(url);
 
-      if (!res.ok) {
-        newQueue.push(item);
-        continue;
-      }
+      if (!res.ok) throw new Error();
 
       const text = await res.text();
 
@@ -200,7 +204,14 @@ async function syncOffline() {
   }
 
   localStorage.setItem("offlineQueue", JSON.stringify(newQueue));
-  showOfflineCount();
+
+  if (newQueue.length > 0) {
+    document.getElementById("offlineCount").innerText =
+      "Offline clocks: " + newQueue.length + " ⚠️";
+  } else {
+    document.getElementById("offlineCount").innerText =
+      "All synced ✅";
+  }
 }
 
 // =========================
@@ -209,7 +220,7 @@ async function syncOffline() {
 function showOfflineCount() {
   let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
   document.getElementById("offlineCount").innerText =
-    q.length > 0 ? "Offline clocks: " + q.length : "All synced ✅";
+    q.length > 0 ? "Offline clocks: " + q.length + " ⚠️" : "All synced ✅";
 }
 
 function status(msg){
