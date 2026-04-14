@@ -47,7 +47,6 @@ fetch(API + "?action=employees")
     status("Ready ✅");
     startScanner();
     showOfflineCount();
-    syncOffline();
   })
   .catch(() => {
     status("Offline mode ⚠️");
@@ -69,7 +68,7 @@ function startScanner() {
 }
 
 // =========================
-// QR RESULT
+// QR
 // =========================
 function onScanSuccess(decodedText) {
 
@@ -86,7 +85,7 @@ function onScanSuccess(decodedText) {
 }
 
 // =========================
-// MANUAL LOOKUP
+// MANUAL
 // =========================
 document.getElementById("manualEmp").addEventListener("input", function () {
   let val = this.value.toUpperCase();
@@ -104,7 +103,6 @@ function clock(type) {
 }
 
 function manualClock(type) {
-
   let val = document.getElementById("manualEmp").value.toUpperCase();
   let emp = employees.find(e => e.empNo === val);
 
@@ -115,11 +113,17 @@ function manualClock(type) {
 }
 
 // =========================
-// SEND / OFFLINE
+// SEND (FIXED)
 // =========================
 function send(empNo, empName, type, method) {
 
   const payload = { empNo, empName, type, method, site:"Site A", supervisor:"Piet" };
+
+  // 🔥 OFFLINE CHECK
+  if (!navigator.onLine) {
+    saveOffline(payload);
+    return;
+  }
 
   const url = API +
     "?empNo=" + empNo +
@@ -130,7 +134,10 @@ function send(empNo, empName, type, method) {
     "&method=" + method;
 
   fetch(url)
-    .then(res => res.text())
+    .then(res => {
+      if (!res.ok) throw new Error("Network error");
+      return res.text();
+    })
     .then(res => {
 
       if (res === "BLOCKED") return alert("❌ Already " + type);
@@ -148,21 +155,22 @@ function saveOffline(data) {
   let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
   q.push(data);
   localStorage.setItem("offlineQueue", JSON.stringify(q));
+
   showOfflineCount();
-  alert("No internet – saved on phone ✅");
+  alert("Saved offline ⚠️");
 }
 
 // =========================
-// SYNC
+// SYNC (FIXED)
 // =========================
-function syncOffline() {
+async function syncOffline() {
 
-  let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-  if (q.length === 0) return;
+  let queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+  if (queue.length === 0) return;
 
-  let newQ = [];
+  let newQueue = [];
 
-  q.forEach(item => {
+  for (let item of queue) {
 
     const url = API +
       "?empNo=" + item.empNo +
@@ -172,15 +180,26 @@ function syncOffline() {
       "&supervisor=" + item.supervisor +
       "&method=" + item.method;
 
-    fetch(url)
-      .then(res => res.text())
-      .then(res => {
-        if (res !== "SAVED") newQ.push(item);
-      })
-      .catch(() => newQ.push(item));
-  });
+    try {
+      const res = await fetch(url);
 
-  localStorage.setItem("offlineQueue", JSON.stringify(newQ));
+      if (!res.ok) {
+        newQueue.push(item);
+        continue;
+      }
+
+      const text = await res.text();
+
+      if (text !== "SAVED") {
+        newQueue.push(item);
+      }
+
+    } catch {
+      newQueue.push(item);
+    }
+  }
+
+  localStorage.setItem("offlineQueue", JSON.stringify(newQueue));
   showOfflineCount();
 }
 
@@ -190,7 +209,7 @@ function syncOffline() {
 function showOfflineCount() {
   let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
   document.getElementById("offlineCount").innerText =
-    q.length > 0 ? "Offline clocks: " + q.length + " ⚠️" : "All synced ✅";
+    q.length > 0 ? "Offline clocks: " + q.length : "All synced ✅";
 }
 
 function status(msg){
