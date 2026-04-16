@@ -3,134 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Klok Stelsel</title>
+    <title>Site Clock System</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f4f4; }
-        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        #reader { width: 100%; border-radius: 10px; overflow: hidden; }
-        .btn-container { margin-top: 20px; display: none; }
-        button { padding: 15px 25px; margin: 10px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; border-radius: 5px; color: white; }
-        .btn-in { background-color: #28a745; }
-        .btn-out { background-color: #dc3545; }
-        .status-ready { color: green; font-weight: bold; }
-        .status-offline { color: orange; font-weight: bold; }
-        input { padding: 10px; width: 80%; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; }
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; }
+        .card { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        #reader { width: 100%; border-radius: 8px; margin-bottom: 20px; }
+        .status { font-weight: bold; margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .ready { background: #e6fffa; color: #2c7a7b; }
+        .error { background: #fff5f5; color: #c53030; }
+        button { padding: 15px 20px; margin: 10px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; color: white; width: 80%; }
+        .btn-in { background-color: #38a169; }
+        .btn-out { background-color: #e53e3e; }
+        #result { display: none; border-top: 2px solid #edf2f7; margin-top: 20px; padding-top: 20px; }
+        input { padding: 12px; width: 80%; margin: 10px 0; border: 1px solid #cbd5e0; border-radius: 6px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>📍 Terrein: SITE A</h2>
-    <p id="status">Laai werknemers...</p>
-    <p id="offlineCount"></p>
+<div class="card">
+    <h2>📍 SITE A</h2>
+    <div id="statusBox" class="status">Laai tans...</div>
+    <p id="offlineCount" style="font-size: 0.9em; color: #718096;"></p>
 
     <div id="reader"></div>
 
-    <div id="result" class="btn-container">
-        <h3 id="empDisplay">---</h3>
-        <button class="btn-in" onclick="clock('IN')">IN-KLOK</button>
-        <button class="btn-out" onclick="clock('OUT')">UIT-KLOK</button>
+    <div id="result">
+        <h3 id="empDisplay" style="color: #2d3748;"></h3>
+        <button class="btn-in" onclick="clock('IN')">KLOK IN</button>
+        <button class="btn-out" onclick="clock('OUT')">KLOK UIT</button>
     </div>
 
-    <hr>
-    <h3>Handmatige Inskrywing</h3>
-    <input type="text" id="manualEmp" placeholder="Werknemer Nommer">
-    <p id="manualName" style="color: blue;"></p>
-    <button class="btn-in" onclick="manualClock('IN')" style="padding: 10px;">Manual IN</button>
-    <button class="btn-out" onclick="manualClock('OUT')" style="padding: 10px;">Manual OUT</button>
+    <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+        <h4>Handmatige Soektog</h4>
+        <input type="text" id="manualInput" placeholder="Tik Werknemer No.">
+        <p id="manualMatch" style="font-weight: bold; color: #4a5568;"></p>
+        <button onclick="manualClock('IN')" style="background: #4a5568; width: 45%; font-size: 12px;">Manual IN</button>
+        <button onclick="manualClock('OUT')" style="background: #4a5568; width: 45%; font-size: 12px;">Manual OUT</button>
+    </div>
 </div>
 
 <script>
-// VERVANG HIERDIE URL MET JOU EIE APPS SCRIPT URL
+// *** VERVANG MET JOU EIE URL ***
 const API = "https://script.google.com/macros/s/AKfycbxFK3iB-nIOnVzBFqt5xI_te_fHCr17ewt5z0m0dvQc6wGFBN-C9KJ3pwziHYJM47j1/exec";
 
 let employees = [];
-let currentEmp = null;
+let scannedEmp = null;
 
-// 1. LAAI WERKNEMERS
+// 1. Kry werknemerlys vanaf Google
 fetch(API + "?action=employees")
     .then(res => res.json())
     .then(data => {
         employees = data;
-        document.getElementById("status").innerText = "Stelsel Gereed ✅";
-        document.getElementById("status").className = "status-ready";
+        updateStatus("Stelsel Gereed ✅", "ready");
         startScanner();
-        showOfflineCount();
+        updateOfflineUI();
     })
     .catch(() => {
-        document.getElementById("status").innerText = "Vanlyn Modus ⚠️";
-        document.getElementById("status").className = "status-offline";
+        updateStatus("Vanlyn Modus ⚠️", "error");
         startScanner();
-        showOfflineCount();
+        updateOfflineUI();
     });
 
-// 2. QR SKANDEERDER
+// 2. Kamera Logika
 function startScanner() {
-    const qr = new Html5Qrcode("reader");
-    qr.start(
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: 250 },
         (decodedText) => {
-            let emp = employees.find(e => decodedText.trim() == e.empNo);
-            if (!emp) return alert("Werknemer nie gevind nie ❌");
-            if (!emp.active) return alert("Werknemer is onaktief ❌");
+            let val = decodedText.trim().toUpperCase();
+            
+            // Soek werknemer (check of dit presies ooreenstem)
+            let emp = employees.find(e => String(e.empNo).trim().toUpperCase() === val);
 
-            currentEmp = emp;
+            if (!emp) {
+                updateStatus("Nie gevind: " + val + " ❌", "error");
+                return;
+            }
+
+            if (!emp.active) {
+                alert("Werknemer is onaktief!");
+                return;
+            }
+
+            scannedEmp = emp;
             document.getElementById("empDisplay").innerText = emp.empNo + " - " + emp.empName;
             document.getElementById("result").style.display = "block";
+            updateStatus("Werknemer Gevind ✅", "ready");
         }
-    ).catch(err => console.error("Kamera fout", err));
+    ).catch(err => console.error(err));
 }
 
-// 3. HANDMATIGE SOEK
-document.getElementById("manualEmp").addEventListener("input", function () {
-    let val = this.value.toUpperCase().trim();
-    let emp = employees.find(e => e.empNo === val);
-    document.getElementById("manualName").innerText = emp ? "Gevind: " + emp.empName : "Nie gevind";
+// 3. Handmatige Soektog
+document.getElementById("manualInput").addEventListener("input", function() {
+    let val = this.value.trim().toUpperCase();
+    let emp = employees.find(e => String(e.empNo).trim().toUpperCase() === val);
+    document.getElementById("manualMatch").innerText = emp ? "Gevind: " + emp.empName : "Soek...";
 });
 
-// 4. KLOK FUNKSIES
+// 4. Klok Aksies
 function clock(type) {
-    if (!currentEmp) return;
-    send(currentEmp.empNo, currentEmp.empName, type, "QR");
-    document.getElementById("result").style.display = "none";
+    if (scannedEmp) {
+        sendData(scannedEmp.empNo, scannedEmp.empName, type, "QR");
+        document.getElementById("result").style.display = "none";
+    }
 }
 
 function manualClock(type) {
-    let val = document.getElementById("manualEmp").value.toUpperCase().trim();
-    let emp = employees.find(e => e.empNo === val);
-    if (!emp) return alert("Fout: Werknemer nie gevind");
-    send(emp.empNo, emp.empName, type, "Handmatig");
+    let val = document.getElementById("manualInput").value.trim().toUpperCase();
+    let emp = employees.find(e => String(e.empNo).trim().toUpperCase() === val);
+    if (!emp) return alert("Werknemer nie gevind nie!");
+    sendData(emp.empNo, emp.empName, type, "Manual");
 }
 
-// 5. STUUR DATA
-function send(empNo, empName, type, method) {
+// 5. Stuur na Google
+function sendData(empNo, empName, type, method) {
     const url = `${API}?empNo=${empNo}&empName=${encodeURIComponent(empName)}&type=${type}&site=Site A&supervisor=Piet&method=${method}`;
 
     fetch(url)
         .then(res => res.text())
         .then(res => {
-            if (res === "SAVED") {
-                alert(`Sukses: ${empName} is ge-${type} ✅`);
-            } else if (res === "BLOCKED") {
-                alert(`❌ FOUT: ${empName} is klaar ge-${type}!`);
-            } else {
-                alert("Stelsel fout ❌");
-            }
+            if (res === "SAVED") alert(empName + " suksesvol ge-" + type);
+            else if (res === "BLOCKED") alert("⚠️ FOUT: Reeds ge-" + type + "!");
+            else alert("Fout: " + res);
         })
         .catch(() => {
-            saveOffline({ empNo, empName, type, method, site: "Site A", supervisor: "Piet" });
+            saveToOffline(empNo, empName, type, method);
         });
 }
 
-// 6. VANLYN LOGIKA
-function saveOffline(data) {
-    let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-    q.push(data);
-    localStorage.setItem("offlineQueue", JSON.stringify(q));
-    showOfflineCount();
-    alert("Geen sein. Stoor tans vanlyn ⚠️");
+// 6. Vanlyn Beheer
+function saveToOffline(empNo, empName, type, method) {
+    let queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+    queue.push({ empNo, empName, type, method, site: "Site A", supervisor: "Piet" });
+    localStorage.setItem("offlineQueue", JSON.stringify(queue));
+    updateOfflineUI();
+    alert("Vanlyn gestoor ⚠️");
 }
 
 async function syncOffline() {
@@ -143,24 +152,27 @@ async function syncOffline() {
         try {
             let res = await fetch(url);
             let text = await res.text();
-            // As hy "SAVED" of "BLOCKED" sê, verwyder hom uit die queue
-            if (text !== "SAVED" && text !== "BLOCKED") {
-                newQueue.push(item);
-            }
+            if (text !== "SAVED" && text !== "BLOCKED") newQueue.push(item);
         } catch {
             newQueue.push(item);
         }
     }
     localStorage.setItem("offlineQueue", JSON.stringify(newQueue));
-    showOfflineCount();
+    updateOfflineUI();
 }
 
-function showOfflineCount() {
+function updateStatus(msg, cls) {
+    const b = document.getElementById("statusBox");
+    b.innerText = msg;
+    b.className = "status " + cls;
+}
+
+function updateOfflineUI() {
     let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-    document.getElementById("offlineCount").innerText = q.length > 0 ? `Wagtend om te sinkroniseer: ${q.length} ⚠️` : "Alles op datum ✅";
+    document.getElementById("offlineCount").innerText = q.length > 0 ? "Wagtend vir sein: " + q.length : "Alles gesinkroniseer ✅";
 }
 
-setInterval(syncOffline, 15000); // Probeer elke 15 sekondes sinkroniseer
+setInterval(syncOffline, 15000);
 </script>
 
 </body>
