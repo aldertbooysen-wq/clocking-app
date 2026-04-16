@@ -1,235 +1,166 @@
 <!DOCTYPE html>
-<html>
+<html lang="af">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://unpkg.com/html5-qrcode"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klok Stelsel</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f4f4; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        #reader { width: 100%; border-radius: 10px; overflow: hidden; }
+        .btn-container { margin-top: 20px; display: none; }
+        button { padding: 15px 25px; margin: 10px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; border-radius: 5px; color: white; }
+        .btn-in { background-color: #28a745; }
+        .btn-out { background-color: #dc3545; }
+        .status-ready { color: green; font-weight: bold; }
+        .status-offline { color: orange; font-weight: bold; }
+        input { padding: 10px; width: 80%; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; }
+    </style>
 </head>
+<body>
 
-<body style="font-family: Arial; text-align:center; padding:20px;">
+<div class="container">
+    <h2>📍 Terrein: SITE A</h2>
+    <p id="status">Laai werknemers...</p>
+    <p id="offlineCount"></p>
 
-<h2>📍 Site: SITE A</h2>
+    <div id="reader"></div>
 
-<p id="status">Loading...</p>
-<p id="offlineCount"></p>
+    <div id="result" class="btn-container">
+        <h3 id="empDisplay">---</h3>
+        <button class="btn-in" onclick="clock('IN')">IN-KLOK</button>
+        <button class="btn-out" onclick="clock('OUT')">UIT-KLOK</button>
+    </div>
 
-<div id="reader" style="width:300px; margin:auto;"></div>
-
-<div id="result" style="display:none;">
-  <h3 id="empDisplay"></h3>
-  <button onclick="clock('IN')">CLOCK IN</button>
-  <button onclick="clock('OUT')">CLOCK OUT</button>
+    <hr>
+    <h3>Handmatige Inskrywing</h3>
+    <input type="text" id="manualEmp" placeholder="Werknemer Nommer">
+    <p id="manualName" style="color: blue;"></p>
+    <button class="btn-in" onclick="manualClock('IN')" style="padding: 10px;">Manual IN</button>
+    <button class="btn-out" onclick="manualClock('OUT')" style="padding: 10px;">Manual OUT</button>
 </div>
 
-<hr>
-
-<h3>Manual Entry</h3>
-<input type="text" id="manualEmp" placeholder="Enter EmpNo">
-<p id="manualName"></p>
-
-<button onclick="manualClock('IN')">Manual IN</button>
-<button onclick="manualClock('OUT')">Manual OUT</button>
-
 <script>
-
+// VERVANG HIERDIE URL MET JOU EIE APPS SCRIPT URL
 const API = "https://script.google.com/macros/s/AKfycbxFK3iB-nIOnVzBFqt5xI_te_fHCr17ewt5z0m0dvQc6wGFBN-C9KJ3pwziHYJM47j1/exec";
 
 let employees = [];
-let empNo = "";
-let empName = "";
+let currentEmp = null;
 
-// =========================
-// LOAD EMPLOYEES
-// =========================
+// 1. LAAI WERKNEMERS
 fetch(API + "?action=employees")
-  .then(res => res.json())
-  .then(data => {
-    employees = data;
-    status("Ready ✅");
-    startScanner();
-    showOfflineCount();
-  })
-  .catch(() => {
-    status("Offline mode ⚠️");
-    startScanner();
-    showOfflineCount();
-  });
+    .then(res => res.json())
+    .then(data => {
+        employees = data;
+        document.getElementById("status").innerText = "Stelsel Gereed ✅";
+        document.getElementById("status").className = "status-ready";
+        startScanner();
+        showOfflineCount();
+    })
+    .catch(() => {
+        document.getElementById("status").innerText = "Vanlyn Modus ⚠️";
+        document.getElementById("status").className = "status-offline";
+        startScanner();
+        showOfflineCount();
+    });
 
-// =========================
-// CAMERA
-// =========================
+// 2. QR SKANDEERDER
 function startScanner() {
-  const qr = new Html5Qrcode("reader");
+    const qr = new Html5Qrcode("reader");
+    qr.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        (decodedText) => {
+            let emp = employees.find(e => decodedText.trim() == e.empNo);
+            if (!emp) return alert("Werknemer nie gevind nie ❌");
+            if (!emp.active) return alert("Werknemer is onaktief ❌");
 
-  qr.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 250 },
-    onScanSuccess
-  ).catch(() => status("Camera error ❌"));
+            currentEmp = emp;
+            document.getElementById("empDisplay").innerText = emp.empNo + " - " + emp.empName;
+            document.getElementById("result").style.display = "block";
+        }
+    ).catch(err => console.error("Kamera fout", err));
 }
 
-// =========================
-// QR
-// =========================
-function onScanSuccess(decodedText) {
-
-  let emp = employees.find(e => decodedText.includes(e.empNo));
-
-  if (!emp) return status("Not found ❌");
-  if (!emp.active) return status("Inactive ❌");
-
-  empNo = emp.empNo;
-  empName = emp.empName;
-
-  document.getElementById("empDisplay").innerText = empNo + " - " + empName;
-  document.getElementById("result").style.display = "block";
-}
-
-// =========================
-// MANUAL
-// =========================
+// 3. HANDMATIGE SOEK
 document.getElementById("manualEmp").addEventListener("input", function () {
-  let val = this.value.toUpperCase();
-  let emp = employees.find(e => e.empNo === val);
-
-  document.getElementById("manualName").innerText =
-    emp ? emp.empName : "Not found";
+    let val = this.value.toUpperCase().trim();
+    let emp = employees.find(e => e.empNo === val);
+    document.getElementById("manualName").innerText = emp ? "Gevind: " + emp.empName : "Nie gevind";
 });
 
-// =========================
-// CLOCK
-// =========================
+// 4. KLOK FUNKSIES
 function clock(type) {
-  send(empNo, empName, type, "QR");
+    if (!currentEmp) return;
+    send(currentEmp.empNo, currentEmp.empName, type, "QR");
+    document.getElementById("result").style.display = "none";
 }
 
 function manualClock(type) {
-  let val = document.getElementById("manualEmp").value.toUpperCase();
-  let emp = employees.find(e => e.empNo === val);
-
-  if (!emp) return alert("Not found");
-  if (!emp.active) return alert("Inactive");
-
-  send(emp.empNo, emp.empName, type, "Manual");
+    let val = document.getElementById("manualEmp").value.toUpperCase().trim();
+    let emp = employees.find(e => e.empNo === val);
+    if (!emp) return alert("Fout: Werknemer nie gevind");
+    send(emp.empNo, emp.empName, type, "Handmatig");
 }
 
-// =========================
-// SEND (FIXED)
-// =========================
+// 5. STUUR DATA
 function send(empNo, empName, type, method) {
+    const url = `${API}?empNo=${empNo}&empName=${encodeURIComponent(empName)}&type=${type}&site=Site A&supervisor=Piet&method=${method}`;
 
-  const payload = { empNo, empName, type, method, site:"Site A", supervisor:"Piet" };
-
-  const url = API +
-    "?empNo=" + empNo +
-    "&empName=" + encodeURIComponent(empName) +
-    "&type=" + type +
-    "&site=Site A" +
-    "&supervisor=Piet" +
-    "&method=" + method;
-
-  fetch(url)
-    .then(res => {
-      if (!res.ok) throw new Error();
-      return res.text();
-    })
-    .then(res => {
-
-      if (res === "SAVED") {
-        alert(type + " saved ✅");
-      } else if (res === "BLOCKED") {
-        alert("❌ Already " + type);
-      } else {
-        throw new Error();
-      }
-
-    })
-    .catch(() => {
-      saveOffline(payload);
-    });
+    fetch(url)
+        .then(res => res.text())
+        .then(res => {
+            if (res === "SAVED") {
+                alert(`Sukses: ${empName} is ge-${type} ✅`);
+            } else if (res === "BLOCKED") {
+                alert(`❌ FOUT: ${empName} is klaar ge-${type}!`);
+            } else {
+                alert("Stelsel fout ❌");
+            }
+        })
+        .catch(() => {
+            saveOffline({ empNo, empName, type, method, site: "Site A", supervisor: "Piet" });
+        });
 }
 
-// =========================
-// OFFLINE SAVE
-// =========================
+// 6. VANLYN LOGIKA
 function saveOffline(data) {
-
-  let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-  q.push(data);
-  localStorage.setItem("offlineQueue", JSON.stringify(q));
-
-  document.getElementById("offlineCount").innerText =
-    "Offline clocks: " + q.length + " ⚠️";
-
-  alert("Saved offline ⚠️");
+    let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+    q.push(data);
+    localStorage.setItem("offlineQueue", JSON.stringify(q));
+    showOfflineCount();
+    alert("Geen sein. Stoor tans vanlyn ⚠️");
 }
 
-// =========================
-// SYNC (FINAL FIX)
-// =========================
 async function syncOffline() {
+    let queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+    if (queue.length === 0) return;
 
-  let queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-
-  if (queue.length === 0) {
-    document.getElementById("offlineCount").innerText = "All synced ✅";
-    return;
-  }
-
-  let newQueue = [];
-
-  for (let item of queue) {
-
-    const url = API +
-      "?empNo=" + item.empNo +
-      "&empName=" + encodeURIComponent(item.empName) +
-      "&type=" + item.type +
-      "&site=" + item.site +
-      "&supervisor=" + item.supervisor +
-      "&method=" + item.method;
-
-    try {
-      const res = await fetch(url);
-
-      if (!res.ok) throw new Error();
-
-      const text = await res.text();
-
-      if (text !== "SAVED") {
-        newQueue.push(item);
-      }
-
-    } catch {
-      newQueue.push(item);
+    let newQueue = [];
+    for (let item of queue) {
+        const url = `${API}?empNo=${item.empNo}&empName=${encodeURIComponent(item.empName)}&type=${item.type}&site=${item.site}&supervisor=${item.supervisor}&method=${item.method}`;
+        try {
+            let res = await fetch(url);
+            let text = await res.text();
+            // As hy "SAVED" of "BLOCKED" sê, verwyder hom uit die queue
+            if (text !== "SAVED" && text !== "BLOCKED") {
+                newQueue.push(item);
+            }
+        } catch {
+            newQueue.push(item);
+        }
     }
-  }
-
-  localStorage.setItem("offlineQueue", JSON.stringify(newQueue));
-
-  if (newQueue.length > 0) {
-    document.getElementById("offlineCount").innerText =
-      "Offline clocks: " + newQueue.length + " ⚠️";
-  } else {
-    document.getElementById("offlineCount").innerText =
-      "All synced ✅";
-  }
+    localStorage.setItem("offlineQueue", JSON.stringify(newQueue));
+    showOfflineCount();
 }
 
-// =========================
-// STATUS
-// =========================
 function showOfflineCount() {
-  let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-  document.getElementById("offlineCount").innerText =
-    q.length > 0 ? "Offline clocks: " + q.length + " ⚠️" : "All synced ✅";
+    let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+    document.getElementById("offlineCount").innerText = q.length > 0 ? `Wagtend om te sinkroniseer: ${q.length} ⚠️` : "Alles op datum ✅";
 }
 
-function status(msg){
-  document.getElementById("status").innerText = msg;
-}
-
-// 🔥 AUTO SYNC
-setInterval(syncOffline, 10000);
-
+setInterval(syncOffline, 15000); // Probeer elke 15 sekondes sinkroniseer
 </script>
 
 </body>
