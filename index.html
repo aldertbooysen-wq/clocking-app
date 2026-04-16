@@ -52,7 +52,6 @@ const API = "https://script.google.com/macros/s/AKfycbxFK3iB-nIOnVzBFqt5xI_te_fH
 let employees = [];
 let currentQREmp = null;
 
-// 1. INITIAL LOAD
 fetch(API + "?action=employees")
     .then(res => res.json())
     .then(data => {
@@ -67,7 +66,6 @@ fetch(API + "?action=employees")
         updateOfflineUI();
     });
 
-// 2. SCANNER LOGIC
 function startScanner() {
     const scanner = new Html5Qrcode("reader");
     scanner.start(
@@ -77,7 +75,12 @@ function startScanner() {
             let scanned = text.trim();
             document.getElementById("debug").innerText = "Scanned: [" + scanned + "]";
 
-            let emp = employees.find(e => String(e.empNo).toUpperCase() === scanned.toUpperCase());
+            // We use .includes as a fallback in case the barcode has hidden characters
+            let emp = employees.find(e => {
+                let sheetNo = String(e.empNo).trim().toUpperCase();
+                let scanNo = scanned.toUpperCase();
+                return scanNo === sheetNo || scanNo.includes(sheetNo);
+            });
 
             if (emp) {
                 if (!emp.active) return alert("Employee Inactive!");
@@ -86,13 +89,14 @@ function startScanner() {
                 document.getElementById("result").style.display = "block";
                 updateStatus("Found: " + emp.empName, "ready");
             } else {
+                // If QR not found, we clear the QR display area specifically
+                document.getElementById("result").style.display = "none";
                 updateStatus("Not Found: " + scanned, "error");
             }
         }
     ).catch(e => console.error(e));
 }
 
-// 3. MANUAL LOGIC
 document.getElementById("manualInput").addEventListener("input", function() {
     let val = this.value.trim().toUpperCase();
     let emp = employees.find(e => String(e.empNo).toUpperCase() === val);
@@ -103,32 +107,47 @@ function manualClock(type) {
     let val = document.getElementById("manualInput").value.trim().toUpperCase();
     let emp = employees.find(e => String(e.empNo).toUpperCase() === val);
     if (!emp) return alert("Employee not found!");
-    if (!emp.active) return alert("Employee is inactive!");
     sendData(emp.empNo, emp.empName, type, "Manual");
 }
 
 function clockAction(type) {
     if (currentQREmp) {
         sendData(currentQREmp.empNo, currentQREmp.empName, type, "QR");
-        document.getElementById("result").style.display = "none";
     }
 }
 
-// 4. DATA SENDING & OFFLINE QUEUE
 function sendData(empNo, empName, type, method) {
     const url = `${API}?empNo=${empNo}&empName=${encodeURIComponent(empName)}&type=${type}&site=Site A&supervisor=Piet&method=${method}`;
 
     fetch(url)
         .then(res => res.text())
         .then(res => {
-            if (res === "SAVED") alert("Success: " + type + " for " + empName);
-            else if (res === "BLOCKED") alert("Already Clocked " + type + "!");
-            else alert("Error: " + res);
+            if (res === "SAVED") {
+                alert("Success: " + type + " for " + empName);
+                resetUI();
+            } else if (res === "BLOCKED") {
+                alert("Already Clocked " + type + "!");
+                resetUI();
+            } else {
+                alert("Error: " + res);
+            }
         })
         .catch(() => {
             saveToOffline(empNo, empName, type, method);
-            alert("Connection lost. Saved offline ⚠️");
+            alert("Saved offline ⚠️");
+            resetUI();
         });
+}
+
+// THIS FUNCTION CLEARS EVERYTHING FOR THE NEXT PERSON
+function resetUI() {
+    currentQREmp = null;
+    document.getElementById("result").style.display = "none";
+    document.getElementById("manualInput").value = "";
+    document.getElementById("manualMatch").innerText = "";
+    document.getElementById("empDisplay").innerText = "";
+    document.getElementById("debug").innerText = "";
+    updateStatus("System Ready ✅", "ready");
 }
 
 function saveToOffline(empNo, empName, type, method) {
@@ -148,7 +167,6 @@ async function syncOffline() {
         try {
             let res = await fetch(url);
             let text = await res.text();
-            // If saved or blocked by server logic, remove from queue
             if (text !== "SAVED" && text !== "BLOCKED") newQueue.push(item);
         } catch {
             newQueue.push(item);
