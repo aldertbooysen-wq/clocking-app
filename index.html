@@ -3,59 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Site Clocking System</title>
+    <title>Site Clock System</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f7f6; }
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f7f6; color: #333; }
         .card { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        #reader { width: 100%; border-radius: 8px; margin-bottom: 10px; }
-        .status-box { font-weight: bold; margin: 10px 0; padding: 10px; border-radius: 5px; }
+        #reader { width: 100%; border-radius: 8px; overflow: hidden; }
+        .status-box { font-weight: bold; margin: 10px 0; padding: 10px; border-radius: 5px; font-size: 14px; }
         .ready { background: #d4edda; color: #155724; }
         .error { background: #f8d7da; color: #721c24; }
-        .debug-text { color: red; font-size: 11px; margin-top: 5px; font-family: monospace; }
-        button { padding: 15px; width: 80%; margin: 10px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; color: white; }
+        .debug-text { color: red; font-size: 11px; margin-top: 5px; font-family: monospace; height: 15px; }
+        button { padding: 15px; width: 45%; margin: 5px; font-size: 14px; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; color: white; }
         .btn-in { background-color: #28a745; }
         .btn-out { background-color: #dc3545; }
-        #result { display: none; border-top: 2px solid #eee; margin-top: 20px; padding-top: 20px; }
+        #result { display: none; border-top: 2px solid #eee; margin-top: 20px; padding-top: 15px; }
+        .manual-section { border-top: 1px solid #ddd; margin-top: 30px; padding-top: 20px; }
+        input { padding: 12px; width: 85%; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+        #manualMatch { font-weight: bold; color: #0056b3; margin-bottom: 10px; min-height: 20px; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h2>📍 SITE A</h2>
-    <div id="status" class="status-box">Loading employees...</div>
-    <div id="offlineInfo" style="font-size: 12px; color: gray;"></div>
+    <div id="status" class="status-box">Connecting...</div>
+    <div id="offlineCount" style="font-size: 12px; color: #666; margin-bottom: 10px;"></div>
     
     <div id="reader"></div>
     <div id="debug" class="debug-text"></div>
 
     <div id="result">
         <h3 id="empDisplay"></h3>
-        <button class="btn-in" onclick="sendClock('IN')">CLOCK IN</button>
-        <button class="btn-out" onclick="sendClock('OUT')">CLOCK OUT</button>
+        <button class="btn-in" onclick="clockAction('IN')">CLOCK IN</button>
+        <button class="btn-out" onclick="clockAction('OUT')">CLOCK OUT</button>
+    </div>
+
+    <div class="manual-section">
+        <h4>Manual Entry</h4>
+        <input type="text" id="manualInput" placeholder="Enter Employee No.">
+        <div id="manualMatch"></div>
+        <button class="btn-in" onclick="manualClock('IN')">Manual IN</button>
+        <button class="btn-out" onclick="manualClock('OUT')">Manual OUT</button>
     </div>
 </div>
 
 <script>
-// --- CONFIGURATION ---
 const API = "https://script.google.com/macros/s/AKfycbxFK3iB-nIOnVzBFqt5xI_te_fHCr17ewt5z0m0dvQc6wGFBN-C9KJ3pwziHYJM47j1/exec";
 let employees = [];
-let currentEmp = null;
+let currentQREmp = null;
 
-// 1. Load employees
+// 1. INITIAL LOAD
 fetch(API + "?action=employees")
     .then(res => res.json())
     .then(data => {
         employees = data;
         updateStatus("System Ready ✅", "ready");
         startScanner();
+        updateOfflineUI();
     })
-    .catch(err => {
+    .catch(() => {
         updateStatus("Offline Mode ⚠️", "error");
         startScanner();
+        updateOfflineUI();
     });
 
-// 2. Scanner Logic
+// 2. SCANNER LOGIC
 function startScanner() {
     const scanner = new Html5Qrcode("reader");
     scanner.start(
@@ -65,68 +77,78 @@ function startScanner() {
             let scanned = text.trim();
             document.getElementById("debug").innerText = "Scanned: [" + scanned + "]";
 
-            // Search for employee (Checking if scanned text matches or contains the empNo)
-            let emp = employees.find(e => {
-                let sheetNo = String(e.empNo).trim().toUpperCase();
-                let scanNo = scanned.toUpperCase();
-                return scanNo === sheetNo || scanNo.includes(sheetNo);
-            });
+            let emp = employees.find(e => String(e.empNo).toUpperCase() === scanned.toUpperCase());
 
             if (emp) {
-                if (!emp.active) return alert("This employee is inactive!");
-                currentEmp = emp;
+                if (!emp.active) return alert("Employee Inactive!");
+                currentQREmp = emp;
                 document.getElementById("empDisplay").innerText = emp.empNo + " - " + emp.empName;
                 document.getElementById("result").style.display = "block";
-                updateStatus("Employee Found ✅", "ready");
+                updateStatus("Found: " + emp.empName, "ready");
             } else {
-                updateStatus("Not on list: " + scanned, "error");
+                updateStatus("Not Found: " + scanned, "error");
             }
         }
     ).catch(e => console.error(e));
 }
 
-// 3. Send Clock Data
-function sendClock(type) {
-    if (!currentEmp) return;
+// 3. MANUAL LOGIC
+document.getElementById("manualInput").addEventListener("input", function() {
+    let val = this.value.trim().toUpperCase();
+    let emp = employees.find(e => String(e.empNo).toUpperCase() === val);
+    document.getElementById("manualMatch").innerText = emp ? "Match: " + emp.empName : "No Match";
+});
 
-    const url = `${API}?empNo=${currentEmp.empNo}&empName=${encodeURIComponent(currentEmp.empName)}&type=${type}&site=Site A&supervisor=Piet&method=QR`;
+function manualClock(type) {
+    let val = document.getElementById("manualInput").value.trim().toUpperCase();
+    let emp = employees.find(e => String(e.empNo).toUpperCase() === val);
+    if (!emp) return alert("Employee not found!");
+    if (!emp.active) return alert("Employee is inactive!");
+    sendData(emp.empNo, emp.empName, type, "Manual");
+}
+
+function clockAction(type) {
+    if (currentQREmp) {
+        sendData(currentQREmp.empNo, currentQREmp.empName, type, "QR");
+        document.getElementById("result").style.display = "none";
+    }
+}
+
+// 4. DATA SENDING & OFFLINE QUEUE
+function sendData(empNo, empName, type, method) {
+    const url = `${API}?empNo=${empNo}&empName=${encodeURIComponent(empName)}&type=${type}&site=Site A&supervisor=Piet&method=${method}`;
 
     fetch(url)
         .then(res => res.text())
         .then(res => {
-            if (res === "SAVED") {
-                alert("Success: " + type + " saved!");
-                location.reload(); 
-            } else if (res === "BLOCKED") {
-                alert("⚠️ ERROR: Already clocked " + type + "!");
-            } else {
-                alert("Error: " + res);
-            }
+            if (res === "SAVED") alert("Success: " + type + " for " + empName);
+            else if (res === "BLOCKED") alert("Already Clocked " + type + "!");
+            else alert("Error: " + res);
         })
         .catch(() => {
-            saveOffline(currentEmp, type);
-            alert("Saved offline ⚠️");
+            saveToOffline(empNo, empName, type, method);
+            alert("Connection lost. Saved offline ⚠️");
         });
 }
 
-// 4. Offline Handling
-function saveOffline(emp, type) {
-    let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-    q.push({ ...emp, type, site: "Site A", supervisor: "Piet", method: "QR_OFFLINE" });
-    localStorage.setItem("offlineQueue", JSON.stringify(q));
+function saveToOffline(empNo, empName, type, method) {
+    let queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+    queue.push({ empNo, empName, type, method, site: "Site A", supervisor: "Piet" });
+    localStorage.setItem("offlineQueue", JSON.stringify(queue));
     updateOfflineUI();
 }
 
 async function syncOffline() {
-    let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-    if (q.length === 0) return;
+    let queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+    if (queue.length === 0) return;
 
     let newQueue = [];
-    for (let item of q) {
+    for (let item of queue) {
         const url = `${API}?empNo=${item.empNo}&empName=${encodeURIComponent(item.empName)}&type=${item.type}&site=${item.site}&supervisor=${item.supervisor}&method=${item.method}`;
         try {
             let res = await fetch(url);
             let text = await res.text();
+            // If saved or blocked by server logic, remove from queue
             if (text !== "SAVED" && text !== "BLOCKED") newQueue.push(item);
         } catch {
             newQueue.push(item);
@@ -144,10 +166,10 @@ function updateStatus(msg, cls) {
 
 function updateOfflineUI() {
     let q = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-    document.getElementById("offlineInfo").innerText = q.length > 0 ? "Waiting for sync: " + q.length : "";
+    document.getElementById("offlineCount").innerText = q.length > 0 ? "Pending Sync: " + q.length + " ⚠️" : "All Synced ✅";
 }
 
-setInterval(syncOffline, 20000); 
+setInterval(syncOffline, 20000);
 </script>
 
 </body>
